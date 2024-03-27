@@ -182,17 +182,17 @@
 
 ### A-1: 6 Servers, 4 Shards, 3 Replicas
 
-![image](https://github.com/Rohan-18102001/Dist-Sys-A2/blob/master/analysis/write(a1).png)
-![image](https://github.com/Rohan-18102001/Dist-Sys-A2/blob/master/analysis/read(a1).png)
+![image](https://raw.githubusercontent.com/Rohan-18102001/Dist-Sys-A2/master/analysis/write(a1).png)
+![image](https://raw.githubusercontent.com/Rohan-18102001/Dist-Sys-A2/master/analysis/read(a1).png)
 
 
 ### A-2: 6 Servers, 4 Shards, 6 Replicas
 
-![image](https://github.com/Rohan-18102001/Dist-Sys-A2/blob/master/analysis/write(a2).png)
-![image](https://github.com/Rohan-18102001/Dist-Sys-A2/blob/master/analysis/read(a2).png)
+![image](https://raw.githubusercontent.com/Rohan-18102001/Dist-Sys-A2/master/analysis/write(a2).png)
+![image](https://raw.githubusercontent.com/Rohan-18102001/Dist-Sys-A2/master/analysis/read(a2).png)
 
 
 ### A-3: 10 Servers, 6 Shards, 8 Replicas
 
-![image](https://github.com/Rohan-18102001/Dist-Sys-A2/blob/master/analysis/write(a3).png)
-![image](https://github.com/Rohan-18102001/Dist-Sys-A2/blob/master/analysis/read(a3).png)
+![image](https://raw.githubusercontent.com/Rohan-18102001/Dist-Sys-A2/master/analysis/write(a3).png)
+![image](https://raw.githubusercontent.com/Rohan-18102001/Dist-Sys-A2/master/analysis/read(a3).png)
