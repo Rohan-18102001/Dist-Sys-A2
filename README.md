@@ -1,81 +1,198 @@
-# Distributed Systems Assignment 1
+# Distributed Systems Assignment 2
 
-This assignment demonstrates a simple distributed systems load balancer that routes incoming HTTP requests to multiple servers using consistent hashing with linear probing. The project consists of two main components: a Load Balancer and multiple Servers.
+## Prerequisites
 
-## Components
+- **docker**: latest version
 
-### Load Balancer
 
-- The Load Balancer is responsible for distributing incoming client requests to the appropriate Server.
-- It uses consistent hashing with linear probing to map client requests to Servers.
-- Provides endpoints for adding, removing, and retrieving information about active Servers dynamically.
-- Written in Python using the `http.server` module for handling HTTP requests.
+## Setup
 
-### Servers
-
-- Servers are the backend components that process client requests.
-- Each Server is identified by a unique name (e.g., Server0_VN0, Server1_VN1).
-- Servers can handle incoming requests and respond with their unique identifier.
-- Written in Python using the `http.server` module for handling HTTP requests.
-
-## Getting Started
-
-To set up and run the load balancer and servers, follow these steps:
-
-1. Clone the repository to your local machine.
-
-2. Start docker: 
-
-   ```bash
-   sudo systemctl start docker
+1. Set neccessary permission for the setup and clean script:
+   ```
+   chmod +x build_and_start.sh 
    ```
 
-3. Run docker-compose:
-
-   ```bash
-   sudo docker-compose up --build
+   ```
+   chmod +x clean.sh 
    ```
 
+2. Setting up Load Balancer:
+   ```
+   ./build_and_start
+   ```
 
-## Usage
+2. Cleaning up resources:
+   ```
+   ./clean
+   ```
 
-### Load Balancer Endpoints
+## Payload for testing different endpoints of the loadbalancer
 
-- To add Servers dynamically, send a POST request to the Load Balancer:
+### /init
 
-  ```bash
-  curl -X POST -H "Content-Type: application/json" -d '{"n": 3, "hostnames": ["Server0", "Server1", "Server2"]}' http://localhost:5000/add
-  ```
+    ```
+    {
+            "N": 6,
+            "schema": {
+                "columns": ["Stud_id", "Stud_name", "Stud_marks"],
+                "dtypes": ["Number", "String", "Number"]
+            },
+            "shards": [
+                {"Stud_id_low": 0, "Shard_id": "sh1", "Shard_size": 4096},
+                {"Stud_id_low": 4096, "Shard_id": "sh2", "Shard_size": 4096},
+                {"Stud_id_low": 8192, "Shard_id": "sh3", "Shard_size": 4096},
+                {"Stud_id_low": 12288, "Shard_id": "sh4", "Shard_size": 4096}
+            ],
+            "servers": {
+                "Server0": ["sh1", "sh2"],
+                "Server1": ["sh3", "sh4"],
+                "Server2": ["sh1", "sh3"],
+                "Server3": ["sh4", "sh2"],
+                "Server4": ["sh1", "sh4"],
+                "Server5": ["sh3", "sh2"]
+            }
+        }
+    ```
+    
 
-- To remove Servers dynamically, send a DELETE request to the Load Balancer:
+### /add 
 
-  ```bash
-  curl -X DELETE -H "Content-Type: application/json" -d '{"n": 2, "hostnames": ["Server0", "Server1"]}' http://localhost:5000/rm
-  ```
+    ```
+    {
+        "n": 2,
+        "new_shards": [
+            {"Stud_id_low": 12288, "Shard_id": "sh5", "Shard_size": 4096}
+        ],
+        "servers": {
+            "Server4": ["sh3", "sh5"],
+            "Server5": ["sh2", "sh5"]
+        }
+    }
+    ```
 
-- To fetch the list of active Servers, send a GET request to the Load Balancer:
+    wrong input - 
+    ```
+    {
+        "n": 3,
+        "new_shards": [
+            {"Stud_id_low": 12288, "Shard_id": "sh5", "Shard_size": 4096}
+        ],
+        "servers": {
+            "Server4": ["sh3", "sh5"],
+            "Server5": ["sh2", "sh5"]
+        }
+    }
+    ```
 
-  ```bash
-  curl http://localhost:5000/get
-  ```
+### /rm
 
-### Client Requests
+    ```
+    {
+        "n": 2,
+        "servers": ["Server4"]
+    }
+    ```
 
-- Clients can send HTTP GET requests to the Load Balancer's root URL (http://localhost:5000/home).
-- The Load Balancer will route the requests to the appropriate Server based on the consistent hashing algorithm.
+    wrong input - 
+    ```
+    {
+        "n": 2,
+        "servers": ["Server1", "Server2", "Server3"]
+    }
+    ```
 
-## Testing
+### /write 
 
-To test the load balancing system, you can use the provided `async_requester_a2.py` script to send a large number of requests to the Load Balancer and measure the distribution of requests among Servers.
+    ```
+    {
+    "data": [
+        {
+            "Stud_id": 4297,
+            "Stud_name": "Saurav",
+            "Stud_marks": 74
+        },
+        {
+            "Stud_id": 14490,
+            "Stud_name": "Sumit",
+            "Stud_marks": 87
+        },
+        {
+            "Stud_id": 12915,
+            "Stud_name": "Rohan",
+            "Stud_marks": 64
+        },
+        {
+            "Stud_id": 2531,
+            "Stud_name": "ABC",
+            "Stud_marks": 2
+        },
+        {
+            "Stud_id": 15393,
+            "Stud_name": "DEF",
+            "Stud_marks": 40
+        },
+        {
+            "Stud_id": 217,
+            "Stud_name": "GHI",
+            "Stud_marks": 16
+        },
+        {
+            "Stud_id": 14047,
+            "Stud_name": "KLM",
+            "Stud_marks": 95
+        }
+    ]
+    }
+    ```
 
-## Customization
+### /read
 
-You can customize the number of Servers and virtual nodes per Server by modifying the `load_balancer.py` and `server.py` files.
+    ```
+    {
+        "Stud_id": {
+            "low": 2531,
+            "high": 14490
+        }
+    }
+    ```
 
-## Contributors
+### /update 
 
-- Saurav
-- Sumit Dwivedi
-- Rohan Patidar
+    ```
+    {
+        "Stud_id": 12915,
+        "data": {
+            "Stud_id": 12915,
+            "Stud_name": "Rohan",
+            "Stud_marks": 100
+        }
+    }
+    ```
+
+### /del
+
+```
+    {
+        "Stud_id": 12915
+    }
+    ```
 
 
+## Analysis
+
+### A-1: 6 Servers, 4 Shards, 3 Replicas
+
+![image](https://github.com/Rohan-18102001/Dist-Sys-A2/blob/master/analysis/write(a1).png)
+![image](https://github.com/Rohan-18102001/Dist-Sys-A2/blob/master/analysis/read(a1).png)
+
+
+### A-2: 6 Servers, 4 Shards, 6 Replicas
+
+![image](https://github.com/Rohan-18102001/Dist-Sys-A2/blob/master/analysis/write(a2).png)
+![image](https://github.com/Rohan-18102001/Dist-Sys-A2/blob/master/analysis/read(a2).png)
+
+
+### A-3: 10 Servers, 6 Shards, 8 Replicas
+
+![image](https://github.com/Rohan-18102001/Dist-Sys-A2/blob/master/analysis/write(a3).png)
+![image](https://github.com/Rohan-18102001/Dist-Sys-A2/blob/master/analysis/read(a3).png)
