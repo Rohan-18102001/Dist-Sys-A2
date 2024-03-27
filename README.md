@@ -51,7 +51,7 @@
                 "Server4": ["sh1", "sh4"],
                 "Server5": ["sh3", "sh2"]
             }
-        }
+    }
     ```
     
 
@@ -70,7 +70,7 @@
     }
     ```
 
-    wrong input - 
+wrong input - 
     ```
     {
         "n": 3,
@@ -93,7 +93,7 @@
     }
     ```
 
-    wrong input - 
+wrong input - 
     ```
     {
         "n": 2,
@@ -171,7 +171,7 @@
 
 ### /del
 
-```
+    ```
     {
         "Stud_id": 12915
     }
