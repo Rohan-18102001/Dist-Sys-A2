@@ -202,3 +202,7 @@ wrong input -
 
 
 ![read(a3)](https://github.com/Rohan-18102001/Dist-Sys-A2/assets/61150756/af9a8228-9b69-41bc-a8f5-c4a8c0b579f1)
+
+### Speeup Calculations
+![WhatsApp Image 2024-03-28 at 2 37 13 PM(1)](https://github.com/Rohan-18102001/Dist-Sys-A2/assets/41463018/d541b767-86b9-47d2-8235-26e23d05a448)
+![WhatsApp Image 2024-03-28 at 2 37 13 PM](https://github.com/Rohan-18102001/Dist-Sys-A2/assets/41463018/adf524cf-678e-4ab7-a7fc-d704fb53670f)
