@@ -1,208 +1,133 @@
-# Distributed Systems Assignment 2
+# CS60002: Distributed Systems (Spring 2024)
+
+## System Design
+
+![image](https://github.com/Bbiswabasu/CS60002/assets/77141319/e12c5241-ba8f-4633-9e4e-a27704ee0dd7)
+The repository implements a distributed load balancer with sharding in Python programming language using Flask for handling HTTP requests to interact with it over the network. Our architecture uses four classes namely ServerMap, Server, ShardMap and Shard to handle all the incoming requests and hold metadata.
+
+<ol>
+<li>ServerMap: ServerMap is a singleton class that maps server IDs to the corresponding server instances.</li>
+<li>Server: Server is a class that holds the necessary information concerning the server instance - the details about the shards and the corresponding databases where they are present. This class handles the CRUD operations for the user requested data.</li>
+<li>ShardMap: ShardMap is a singleton class that maps shard IDs to the corresponding shard instances.</li>
+<li>Shard: Shard is a class that implements load balancing using consistent hashing for the incoming requests to the dynamically allocated servers.</li>
+</ol>
+
+### Persistent Storage Handler
+
+We have created a database access object (DAO) called Manager that provides an abstraction for handling connections to the persistent layer. The abstraction is achieved by using three primary classes:
+
+<ol>
+<li>SQLHandler: The SQLHandler is a wrapper object that encapsulates the database connection. It uses the provided database schema and credentials to create a database table. It also houses functions for handling retrieval, insertion, deletion an updation of data.</li>
+<li>DataHandler: The DataHandler allows us access to all the useful CRUD operations provided by the SQLHandler. This abstraction helps us to migrate across different database solutions such as SQL or NoSQL as well as over different providers such as MySQL, MariaDB, MongoDB, Cassandra, etc.</li>
+<li>Manager: The Manager class provides the service layer object that is exposed for the controller endpoints. It is a wrapper over the DataHandler and SQLHandler.</li>
+</ol>
+
+### Design Choice: In-Memory Storage for Load Balancer, Persistent Storage for Servers
+
+- The system diagram above shows that the sharded databases require 3 tables namely ShardT, MapT and StudT. The StudT table stores the actual data while the other two store metadata required for performing server allocation and load balancing.
+- Each server is containerized in its own Docker container and has independent control over its shards - each of which is a separate database with the StudT schema. Separate databases are maintained as opposed to separate tables within a single database to gain two advantages. Firstly, keeping separate databases helps in uncoupling the shards within a server. If one of the shards becomes faulty only its own database is affected and other shards in the server can function normally. Secondly, concurrent requests can be handled more efficiently without connection pool bottlenecks. Each database has its own pool of threads for carrying out database operations. Having multiple shards as tables in one database would lead to sharing of these threads thus impacting concurrency.
+- The load balancer is containerized in its own Docker container on the same network as the server containers and can thus communicate with the servers over the Docker DNS. The load balancer is tasked with allocating requests using consistent hashing and maintaining the servers. The metadata in question can either be stored in a persistent database or in-memory. We have chosen to do this in-memory due to the advantages that this strategy provides: (i) Keeping the metadata in SQL databases would require querying the databases every time a request is made or a server is to be respawned. This would reduce the response time as compared to storing the required data in Python lists and dictionaries. (ii) The implementation of the load balancing logic would require maintenance of the hash ring for consistent hashing which must be stored in-memory. (iii) Maintaining the metadata in tables would be useful if the tables are stored outside the load balancer container and is copied into the container's memory when the load balancer is spawned which adds another database overhead. Since we are not concerned with load balancer crash handling, calling the `/init` endpoint on startup is sufficient.
+
+### Design Choice: Two-Stage Locking Mechanism for Write Synchronisation
+
+- In order to ensure consistency of writes across shards and servers, a two-stage mutex lock mechanism is implemented - a global lock and shard lock.
+- The global lock is used to ensure mutual exclusion for populating the shard locks dictionary.
+- Once the shard locks are initialised, the locks in the dictionary provide a second level of mutual exclusion where each writer tries to acquire this lock, writes data once the lock is acquired and then releases the lock after completing the write operation.
+
+### Design Choice: Respawning Crashed Servers
+
+- Whenever a `/read` request is received and a server is allocated, the load balancer checks for a heartbeat from the server. If a heartbeat is returned, the request is satisfied by that server. If no heartbeat is received, the load balancer respawns the server along with the shards that it contained.
+- The load balancer uses the server to shard maps to identify the shards to be respawned and the shard to server maps to identify a server from which shard data can be duplicated using the `/copy` endpoint of the server.
+- Once the data is obtained, the server container is spawned, shard databases are created and the data is migrated.
+- A similar heartbeat check protocol is followed for `/write`, `/update` and `/del`.
 
 ## Prerequisites
 
-- **docker**: latest version
+<ol>
+<li> docker: latest [Docker version 25.0.0, build e758fe5]</li>
 
+```
+sudo apt-get update
 
-## Setup
+sudo apt-get install \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release
 
-1. Set neccessary permission for the setup and clean script:
-   ```
-   chmod +x build_and_start.sh 
-   ```
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
-   ```
-   chmod +x clean.sh 
-   ```
+echo \
+"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+$(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-2. Setting up Load Balancer:
-   ```
-   ./build_and_start
-   ```
+sudo apt-get update
 
-2. Cleaning up resources:
-   ```
-   ./clean
-   ```
+sudo apt-get install docker-ce docker-ce-cli containerd.io
+```
 
-## Payload for testing different endpoints of the loadbalancer
+<li> docker-compose version v2.24.2 </li>
 
-### /init
+```
+sudo curl -SL https://github.com/docker/compose/releases/download/v2.15.1/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
 
-    ```
-    {
-            "N": 6,
-            "schema": {
-                "columns": ["Stud_id", "Stud_name", "Stud_marks"],
-                "dtypes": ["Number", "String", "Number"]
-            },
-            "shards": [
-                {"Stud_id_low": 0, "Shard_id": "sh1", "Shard_size": 4096},
-                {"Stud_id_low": 4096, "Shard_id": "sh2", "Shard_size": 4096},
-                {"Stud_id_low": 8192, "Shard_id": "sh3", "Shard_size": 4096},
-                {"Stud_id_low": 12288, "Shard_id": "sh4", "Shard_size": 4096}
-            ],
-            "servers": {
-                "Server0": ["sh1", "sh2"],
-                "Server1": ["sh3", "sh4"],
-                "Server2": ["sh1", "sh3"],
-                "Server3": ["sh4", "sh2"],
-                "Server4": ["sh1", "sh4"],
-                "Server5": ["sh3", "sh2"]
-            }
-    }
-    ```
-    
+sudo chmod +x /usr/local/bin/docker-compose
 
-### /add 
+sudo ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+```
 
-    ```
-    {
-        "n": 2,
-        "new_shards": [
-            {"Stud_id_low": 12288, "Shard_id": "sh5", "Shard_size": 4096}
-        ],
-        "servers": {
-            "Server4": ["sh3", "sh5"],
-            "Server5": ["sh2", "sh5"]
-        }
-    }
-    ```
+<li> GNU Make 4.3</li>
 
-wrong input - 
-    ```
-    {
-        "n": 3,
-        "new_shards": [
-            {"Stud_id_low": 12288, "Shard_id": "sh5", "Shard_size": 4096}
-        ],
-        "servers": {
-            "Server4": ["sh3", "sh5"],
-            "Server5": ["sh2", "sh5"]
-        }
-    }
-    ```
+```
+sudo apt-get -y install make
+```
 
-### /rm
+</ol>
 
-    ```
-    {
-        "n": 2,
-        "servers": ["Server4"]
-    }
-    ```
+## Installation Steps
 
-wrong input - 
-    ```
-    {
-        "n": 2,
-        "servers": ["Server1", "Server2", "Server3"]
-    }
-    ```
+Deploying Load Balancer Container: Creating Docker image, network, DNS and running the load balancer.
 
-### /write 
+```
+make all
+```
 
-    ```
-    {
-    "data": [
-        {
-            "Stud_id": 4297,
-            "Stud_name": "Saurav",
-            "Stud_marks": 74
-        },
-        {
-            "Stud_id": 14490,
-            "Stud_name": "Sumit",
-            "Stud_marks": 87
-        },
-        {
-            "Stud_id": 12915,
-            "Stud_name": "Rohan",
-            "Stud_marks": 64
-        },
-        {
-            "Stud_id": 2531,
-            "Stud_name": "ABC",
-            "Stud_marks": 2
-        },
-        {
-            "Stud_id": 15393,
-            "Stud_name": "DEF",
-            "Stud_marks": 40
-        },
-        {
-            "Stud_id": 217,
-            "Stud_name": "GHI",
-            "Stud_marks": 16
-        },
-        {
-            "Stud_id": 14047,
-            "Stud_name": "KLM",
-            "Stud_marks": 95
-        }
-    ]
-    }
-    ```
+Shutting down the load balancer and servers, deleting the network, removing images and clearing other cache.
 
-### /read
+```
+make clean
+```
 
-    ```
-    {
-        "Stud_id": {
-            "low": 2531,
-            "high": 14490
-        }
-    }
-    ```
+## Performance Analysis
 
-### /update 
+To analyse the performance of our developed distributed database, we executed 10000 concurrent read and write requests with 20 workers.
 
-    ```
-    {
-        "Stud_id": 12915,
-        "data": {
-            "Stud_id": 12915,
-            "Stud_name": "Rohan",
-            "Stud_marks": 100
-        }
-    }
-    ```
+### A1: 6 Servers, 4 Shards, 3 Replicas
 
-### /del
+![alt text](images/a1_read.png)
+Read speed: 158.35 /s
 
-    ```
-    {
-        "Stud_id": 12915
-    }
-    ```
+![alt text](images/a1_write.png)
+Write speed: 71.54 /s
 
+### A2: 6 Servers, 4 Shards, 6 Replicas
 
-## Analysis
+![alt text](images/a2_read.png)
+Read speed: 165.66 /s
 
-### A-1: 6 Servers, 4 Shards, 3 Replicas
+![alt text](images/a2_write.png)
+Write speed: 38.11 /s
 
-![write(a1)](https://github.com/Rohan-18102001/Dist-Sys-A2/assets/61150756/e3ffbb2c-dc37-4c15-b1c9-fdaac78e8a13)
+### A3: 10 Servers, 6 Shards, 8 Replicas
 
+![alt text](images/a3_read.png)
+Read speed: 158.02 /s
 
-![read(a1)](https://github.com/Rohan-18102001/Dist-Sys-A2/assets/61150756/d0b2ac92-734d-439f-80b6-863e31f6227e)
+![alt text](images/a3_write.png)
+Write speed: 26.94 /s
 
+### Observations
 
-### A-2: 6 Servers, 4 Shards, 6 Replicas
-
-![write(a2)](https://github.com/Rohan-18102001/Dist-Sys-A2/assets/61150756/54c04f39-6cc1-4270-a749-b9587555ecc7)
-
-
-![read(a2)](https://github.com/Rohan-18102001/Dist-Sys-A2/assets/61150756/2c05422e-9445-42e6-a051-aa9d8491a6b2)
-
-
-### A-3: 10 Servers, 6 Shards, 8 Replicas
-
-![write(a3)](https://github.com/Rohan-18102001/Dist-Sys-A2/assets/61150756/3907667d-fdfd-440b-8a3a-b463e69c7361)
-
-
-![read(a3)](https://github.com/Rohan-18102001/Dist-Sys-A2/assets/61150756/af9a8228-9b69-41bc-a8f5-c4a8c0b579f1)
-
-### Speeup Calculations
-![WhatsApp Image 2024-03-28 at 2 37 13 PM(1)](https://github.com/Rohan-18102001/Dist-Sys-A2/assets/41463018/d541b767-86b9-47d2-8235-26e23d05a448)
-![WhatsApp Image 2024-03-28 at 2 37 13 PM](https://github.com/Rohan-18102001/Dist-Sys-A2/assets/41463018/adf524cf-678e-4ab7-a7fc-d704fb53670f)
+- Since the number of replicas increases, write speed decreases as the lock has to be acquired across multiple servers thereby increasing the number of database transactions.
+- Read speed increases with an increase in the number of replicas to some extent since we can service parallel requests in a non-blocking fashion. More number of servers increase availability of request handling capacity.
